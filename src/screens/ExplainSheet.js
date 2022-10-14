@@ -36,6 +36,7 @@ import {
 } from '@/utils';
 import { cloudPlatformAccountName } from '@/utils/platform';
 import { useTheme } from '@/theme';
+import { isL2Network } from '@/handlers/web3';
 
 const { GAS_TRENDS } = gasUtils;
 export const ExplainSheetHeight = android ? 454 : 434;
@@ -286,18 +287,39 @@ export const explainers = (params, colors) => ({
   output_disabled: {
     extraHeight: -30,
     title: params?.inputToken
-      ? lang.t('explain.output_disabled.title', {
-          inputToken: params?.inputToken,
-        })
+      ? lang.t(
+          `explain.output_disabled.${
+            params?.isCrosschainSwap ? 'title_crosschain' : 'title'
+          }`,
+          {
+            inputToken: params?.inputToken,
+            fromNetwork: networkInfo[params?.fromNetwork]?.name,
+          }
+        )
       : lang.t('explain.output_disabled.title_empty'),
-    text: lang.t('explain.output_disabled.text', {
-      network: networkInfo[params?.network]?.name,
-      inputToken: params?.inputToken,
-      outputToken: params?.outputToken,
-    }),
-    logo: (
+
+    text: params?.isCrosschainSwap
+      ? lang.t(
+          `explain.output_disabled.${
+            params?.isBridgeSwap ? 'text_bridge' : 'text_crosschain'
+          }`,
+          {
+            inputToken: params?.inputToken,
+            outputToken: params?.outputToken,
+            fromNetwork: networkInfo[params?.fromNetwork]?.name,
+            toNetwork: networkInfo[params?.toNetwork]?.name,
+          }
+        )
+      : lang.t('explain.output_disabled.text', {
+          fromNetwork: networkInfo[params?.fromNetwork]?.name,
+          inputToken: params?.inputToken,
+          outputToken: params?.outputToken,
+        }),
+    logo: !isL2Network(params?.fromNetwork) ? (
+      <CoinIcon address={ETH_ADDRESS} size={40} symbol={ETH_SYMBOL} />
+    ) : (
       <ChainBadge
-        assetType={params?.network}
+        assetType={params?.fromNetwork}
         marginBottom={8}
         position="relative"
         size="large"
@@ -833,6 +855,96 @@ export const explainers = (params, colors) => ({
         colors?.networkColors[params?.network] &&
         colors?.alpha(colors?.networkColors[params?.network], 0.05),
       onPress: params?.onRefuel,
+    },
+  },
+  swap_refuel_deduct: {
+    logo: (
+      <DashedWrapper
+        size={50}
+        childXPosition={10}
+        colors={[
+          colors?.networkColors[params?.network],
+          getTokenMetadata(params?.nativeAsset?.mainnet_address)?.color ??
+            colors?.appleBlue,
+        ]}
+      >
+        <CoinIcon
+          address={params?.nativeAsset?.mainnet_address}
+          symbol={params?.nativeAsset?.symbol}
+          type={params?.nativeAsset?.type}
+          size={30}
+          badgeSize="tiny"
+          badgeXPosition={-4}
+          badgeYPosition={1}
+        />
+      </DashedWrapper>
+    ),
+    title: lang.t('explain.swap_refuel_deduct.title', {
+      gasToken: params?.gasToken,
+    }),
+    text: lang.t('explain.swap_refuel_deduct.text', {
+      networkName: params?.networkName,
+      gasToken: params?.gasToken,
+    }),
+    button: {
+      label: lang.t('button.no_thanks'),
+      textColor: 'blueGreyDark60',
+      bgColor: colors?.transparent,
+      onPress: params?.onContinue,
+    },
+    secondaryButton: {
+      label: lang.t('explain.swap_refuel_deduct.button', {
+        networkName: params?.networkName,
+        gasToken: params?.gasToken,
+      }),
+      textColor: colors?.networkColors[params?.network],
+      bgColor:
+        colors?.networkColors[params?.network] &&
+        colors?.alpha(colors?.networkColors[params?.network], 0.05),
+      onPress: params?.onRefuel,
+    },
+  },
+  swap_refuel_notice: {
+    extraHeight: 50,
+    logo: (
+      <DashedWrapper
+        size={50}
+        childXPosition={10}
+        colors={[
+          colors?.networkColors[params?.network],
+          getTokenMetadata(params?.nativeAsset?.mainnet_address)?.color ??
+            colors?.appleBlue,
+        ]}
+      >
+        <CoinIcon
+          address={params?.nativeAsset?.mainnet_address}
+          symbol={params?.nativeAsset?.symbol}
+          type={params?.nativeAsset?.type}
+          size={30}
+          badgeSize="tiny"
+          badgeXPosition={-4}
+          badgeYPosition={1}
+        />
+      </DashedWrapper>
+    ),
+    title: lang.t('explain.swap_refuel_notice.title', {
+      gasToken: params?.gasToken,
+    }),
+    text: lang.t('explain.swap_refuel_notice.text', {
+      networkName: params?.networkName,
+      gasToken: params?.gasToken,
+    }),
+    button: {
+      label: lang.t('button.go_back'),
+      textColor: 'blueGreyDark60',
+      bgColor: colors?.transparent,
+      onPress: params?.onContinue,
+    },
+    secondaryButton: {
+      label: lang.t('button.proceed_anyway'),
+      textColor: colors?.appleBlue,
+      bgColor: colors?.alpha(colors?.appleBlue, 0.05),
+      onPress: params?.onProceed,
     },
   },
 });

@@ -48,15 +48,16 @@ import {
   ParsedAddressAsset,
   SwappableAsset,
 } from '@/entities';
+import { ExchangeModalTypes, isKeyboardOpen, Network } from '@/helpers';
+import { KeyboardType } from '@/helpers/keyboardTypes';
 import { getProviderForNetwork, getHasMerged } from '@/handlers/web3';
 import {
-  ExchangeModalTypes,
-  isKeyboardOpen,
-  Network,
-  NetworkTypes,
-} from '@/helpers';
-import { KeyboardType } from '@/helpers/keyboardTypes';
-import { divide, greaterThan, isZero, multiply } from '@/helpers/utilities';
+  divide,
+  fromWei,
+  greaterThan,
+  multiply,
+  subtract,
+} from '@/helpers/utilities';
 import {
   useAccountSettings,
   useCurrentNonce,
@@ -94,6 +95,7 @@ import {
   SwapActionParameters,
 } from '@/raps/common';
 import { CROSSCHAIN_SWAPS, useExperimentalFlag } from '@/config';
+import useSwapRefuel, { RefuelState } from '@/hooks/useSwapRefuel';
 import networkInfo from '@/helpers/networkInfo';
 import logger from '@/utils/logger';
 import { CrosschainQuote, Quote } from '@rainbow-me/swaps';
@@ -192,7 +194,7 @@ export default function ExchangeModal({
     { data: { genericAssets: { [address: string]: SwappableAsset } } },
     { [address: string]: SwappableAsset }
   >(({ data: { genericAssets } }) => genericAssets);
-
+  const [hasDeductedRefuel, setHasDeductedRefuel] = useState(false);
   const {
     navigate,
     setParams,
@@ -253,6 +255,7 @@ export default function ExchangeModal({
     chainId,
     currentNetwork,
     isCrosschainSwap,
+    isBridgeSwap,
   } = useMemo(() => {
     const inputNetwork = ethereumUtils.getNetworkFromType(inputCurrency?.type);
     const outputNetwork = ethereumUtils.getNetworkFromType(
@@ -264,18 +267,26 @@ export default function ExchangeModal({
             inputCurrency?.type ?? outputCurrency?.type
           )
         : 1;
+
     const currentNetwork = ethereumUtils.getNetworkFromChainId(chainId);
     const isCrosschainSwap =
       crosschainSwapsEnabled && inputNetwork !== outputNetwork;
-
+    const isBridgeSwap = inputCurrency?.symbol === outputCurrency?.symbol;
     return {
       inputNetwork,
       outputNetwork,
       chainId,
       currentNetwork,
       isCrosschainSwap,
+      isBridgeSwap,
     };
-  }, [crosschainSwapsEnabled, inputCurrency?.type, outputCurrency?.type]);
+  }, [
+    crosschainSwapsEnabled,
+    inputCurrency?.symbol,
+    inputCurrency?.type,
+    outputCurrency?.symbol,
+    outputCurrency?.type,
+  ]);
 
   // if the default input is on a different network than
   // we want to update the output to be on the same, if its not available -> null
@@ -321,6 +332,7 @@ export default function ExchangeModal({
     flipCurrencies,
     navigateToSelectInputCurrency,
     navigateToSelectOutputCurrency,
+    updateAndFocusInputAmount,
   } = useSwapCurrencyHandlers({
     currentNetwork,
     inputNetwork,
@@ -842,6 +854,7 @@ export default function ExchangeModal({
       quoteError,
       tradeDetails,
       type,
+      isBridgeSwap,
     }),
     [
       currentNetwork,
@@ -855,6 +868,7 @@ export default function ExchangeModal({
       type,
       quoteError,
       isSufficientBalance,
+      isBridgeSwap,
     ]
   );
 
@@ -897,6 +911,11 @@ export default function ExchangeModal({
     swapSupportsFlashbots,
   ]);
 
+  const resetRefuelState = useCallback(() => {
+    setHasDeductedRefuel(false);
+    setRefuel(false);
+  }, [setRefuel]);
+
   const navigateToSwapDetailsModal = useCallback(
     (isRefuelTx = false) => {
       android && Keyboard.dismiss();
@@ -913,7 +932,9 @@ export default function ExchangeModal({
           currentNetwork,
           flashbotTransaction: flashbots,
           isRefuelTx,
-          onClose: () => setRefuel(false),
+          onClose: () => {
+            resetRefuelState();
+          },
           restoreFocusOnSwapModal: () => {
             android &&
               (lastFocusedInputHandle.current = lastFocusedInputHandleTemporary);
@@ -950,50 +971,138 @@ export default function ExchangeModal({
       outputCurrency?.name,
       outputCurrency?.symbol,
       outputFieldRef,
+      resetRefuelState,
       setParams,
-      setRefuel,
       type,
     ]
   );
+
+  const {
+    showRefuelSheet,
+    refuelState,
+    outputNativeAsset,
+    minRefuelAmount,
+  } = useSwapRefuel({
+    inputCurrency,
+    outputCurrency,
+    tradeDetails,
+  });
 
   const navigateToRefuelModal = useCallback(() => {
     const networkDetails = networkInfo[outputNetwork];
     android && Keyboard.dismiss();
 
-    navigate(Routes.EXPLAIN_SHEET, {
-      network: outputNetwork,
-      networkName: networkDetails?.name,
-      gasToken: networkDetails?.gasToken,
-      nativeAsset: {
-        mainnet_address: outputNetworkDetails?.mainnet_address,
-        type: outputNetworkDetails?.type,
-        symbol: outputNetworkDetails?.symbol,
-      },
-      onRefuel: (
-        navigate: () => void,
-        goBack: () => void,
-        handleClose: () => void
-      ) => {
-        setRefuel(true);
-        handleClose();
-        navigateToSwapDetailsModal(true);
-      },
-      onContinue: (
-        navigate: () => void,
-        goBack: () => void,
-        handleClose: () => void
-      ) => {
-        handleClose();
-        navigateToSwapDetailsModal();
-      },
-      type: 'swap_refuel_add',
-    });
+    if (refuelState === RefuelState.Add) {
+      return navigate(Routes.EXPLAIN_SHEET, {
+        network: outputNetwork,
+        networkName: networkDetails?.name,
+        gasToken: networkDetails?.gasToken,
+        nativeAsset: {
+          mainnet_address: outputNativeAsset?.mainnet_address,
+          type: outputNativeAsset?.type,
+          symbol: outputNativeAsset?.symbol,
+        },
+        onRefuel: (
+          navigate: () => void,
+          goBack: () => void,
+          handleClose: () => void
+        ) => {
+          setRefuel(true);
+          handleClose();
+          navigateToSwapDetailsModal(true);
+        },
+        onContinue: (
+          navigate: () => void,
+          goBack: () => void,
+          handleClose: () => void
+        ) => {
+          handleClose();
+          navigateToSwapDetailsModal();
+        },
+        type: 'swap_refuel_add',
+      });
+    }
+
+    if (refuelState === RefuelState.Deduct) {
+      return navigate(Routes.EXPLAIN_SHEET, {
+        network: outputNetwork,
+        networkName: networkDetails?.name,
+        gasToken: networkDetails?.gasToken,
+        nativeAsset: {
+          mainnet_address: outputNativeAsset?.mainnet_address,
+          type: outputNativeAsset?.type,
+          symbol: outputNativeAsset?.symbol,
+        },
+        onRefuel: (
+          navigate: () => void,
+          goBack: () => void,
+          handleClose: () => void
+        ) => {
+          // new input is sellAmount - minRefuelAmount if sellAmount > minRefuelAmount
+          const newSellAmountAfterRefuel = subtract(
+            tradeDetails?.sellAmount?.toString() || '0',
+            minRefuelAmount?.toString() || '0'
+          );
+
+          // if user press adjust and add 3 go back to exchange modal and update the input token amount
+          updateAndFocusInputAmount(fromWei(newSellAmountAfterRefuel));
+          setHasDeductedRefuel(true);
+          setRefuel(true);
+          handleClose();
+        },
+        onContinue: (
+          navigate: () => void,
+          goBack: () => void,
+          handleClose: () => void
+        ) => {
+          handleClose();
+          navigateToSwapDetailsModal();
+        },
+        type: 'swap_refuel_deduct',
+      });
+    }
+
+    if (refuelState === RefuelState.Notice) {
+      return navigate(Routes.EXPLAIN_SHEET, {
+        network: outputNetwork,
+        networkName: networkDetails?.name,
+        gasToken: networkDetails?.gasToken,
+        nativeAsset: {
+          mainnet_address: outputNativeAsset?.mainnet_address,
+          type: outputNativeAsset?.type,
+          symbol: outputNativeAsset?.symbol,
+        },
+        onProceed: (
+          navigate: () => void,
+          goBack: () => void,
+          handleClose: () => void
+        ) => {
+          handleClose();
+          navigateToSwapDetailsModal();
+        },
+        onContinue: (
+          navigate: () => void,
+          goBack: () => void,
+          handleClose: () => void
+        ) => {
+          handleClose();
+        },
+        type: 'swap_refuel_notice',
+      });
+    }
   }, [
     outputNetwork,
+    refuelState,
     navigate,
-    navigateToSwapDetailsModal,
+    outputNativeAsset?.mainnet_address,
+    outputNativeAsset?.type,
+    outputNativeAsset?.symbol,
     setRefuel,
-    outputNetworkDetails,
+    navigateToSwapDetailsModal,
+    tradeDetails?.sellAmount,
+    minRefuelAmount,
+    updateAndFocusInputAmount,
+    handleFocus,
   ]);
 
   const handleTapWhileDisabled = useCallback(() => {
@@ -1001,7 +1110,10 @@ export default function ExchangeModal({
     lastFocusedInput?.blur();
     navigate(Routes.EXPLAIN_SHEET, {
       inputToken: inputCurrency?.symbol,
-      network: currentNetwork,
+      fromNetwork: inputNetwork,
+      toNetwork: outputNetwork,
+      isCrosschainSwap,
+      isBridgeSwap,
       onClose: () => {
         InteractionManager.runAfterInteractions(() => {
           setTimeout(() => {
@@ -1013,11 +1125,14 @@ export default function ExchangeModal({
       type: 'output_disabled',
     });
   }, [
-    currentNetwork,
     inputCurrency?.symbol,
+    inputNetwork,
+    isBridgeSwap,
+    isCrosschainSwap,
     lastFocusedInputHandle,
     navigate,
     outputCurrency?.symbol,
+    outputNetwork,
   ]);
 
   const showConfirmButton = isSavings
@@ -1025,31 +1140,17 @@ export default function ExchangeModal({
     : !!inputCurrency && !!outputCurrency;
 
   const handleConfirmExchangePress = useCallback(() => {
-    if (!outputNetworkDetails?.balance?.amount) return NOOP;
-
-    const hasZeroBalance = isZero(outputNetworkDetails.balance.amount);
-
-    const showRefuelAddSheet =
-      isCrosschainSwap &&
-      hasZeroBalance &&
-      outputNetwork !== NetworkTypes.mainnet;
-
-    if (loading) {
-      return NOOP;
-    }
-
-    if (showRefuelAddSheet) {
+    if (loading) return NOOP();
+    if (showRefuelSheet && !hasDeductedRefuel) {
       return navigateToRefuelModal();
     }
-
     return navigateToSwapDetailsModal();
   }, [
-    outputNetworkDetails?.balance?.amount,
-    isCrosschainSwap,
-    outputNetwork,
     loading,
+    showRefuelSheet,
     navigateToSwapDetailsModal,
     navigateToRefuelModal,
+    hasDeductedRefuel,
   ]);
 
   return (
@@ -1086,7 +1187,10 @@ export default function ExchangeModal({
                 network={inputNetwork}
                 onFocus={handleFocus}
                 onPressMaxBalance={updateMaxInputAmount}
-                onPressSelectInputCurrency={navigateToSelectInputCurrency}
+                onPressSelectInputCurrency={chainId => {
+                  resetRefuelState();
+                  navigateToSelectInputCurrency(chainId);
+                }}
                 setInputAmount={updateInputAmount}
                 setNativeAmount={updateNativeAmount}
                 testID={`${testID}-input`}
@@ -1101,10 +1205,12 @@ export default function ExchangeModal({
                   }
                   network={outputNetwork}
                   onFocus={handleFocus}
-                  onPressSelectOutputCurrency={() =>
-                    navigateToSelectOutputCurrency(chainId)
-                  }
-                  {...(currentNetwork === Network.arbitrum &&
+                  onPressSelectOutputCurrency={() => {
+                    resetRefuelState();
+                    navigateToSelectOutputCurrency(chainId);
+                  }}
+                  {...((currentNetwork === Network.arbitrum ||
+                    isCrosschainSwap) &&
                     !!outputCurrency && {
                       onTapWhileDisabled: handleTapWhileDisabled,
                     })}
