@@ -190,7 +190,7 @@
       "add_to_list": "Add to List :)",
       "all": "Tous",
       "attempt_cancellation": "Attempt Cancellation :)",
-      "buy_more_eth": "Buy more ETH :)",
+      "buy_eth": "Buy Ethereum :)",
       "cancel": "Annuler",
       "close": "Fermer",
       "confirm": "Confirmer",
@@ -285,6 +285,7 @@
         "title": "Create your ENS profile :)",
         "body": "Replace your wallet address with a profile owned entirely by you. :)"
       },
+      "eth": { "buy_ethereum": "Buy Ethereum :)", "today": "today :)" },
       "gas": {
         "average": "Average :)",
         "gwei": "Gwei :)",
@@ -1328,7 +1329,9 @@
         "public_showcase": "Public Showcase :)",
         "when_public": "When public, your NFT Showcase will be visible on your Rainbow profile! :)",
         "when_public_prefix": "When public, your NFT Showcase will be visible on your Rainbow web profile! You can view your profile at :)",
-        "view_profile": "View your profile :)"
+        "view_profile": "View your profile :)",
+        "analytics_toggle": "Analytics :)",
+        "analytics_toggle_description": "Help Rainbow improve its products and services by allowing analytics of usage data. Collected data is not associated with you or your account. :)"
       },
       "restore": "Restore to original deployment :)",
       "review": "Review Rainbow :)",
