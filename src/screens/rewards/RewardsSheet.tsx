@@ -4,8 +4,7 @@ import { useDimensions } from '@/hooks';
 import { BackgroundProvider, Box } from '@/design-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RewardsContent } from '@/screens/rewards/components/RewardsContent';
-import { RewardsFakeContent } from '@/screens/rewards/components/RewardsFakeContent';
-import { IS_ANDROID } from '@/env';
+import { IS_ANDROID, IS_IOS } from '@/env';
 import { StatusBar } from 'react-native';
 import { useRewards } from '@/resources/rewards/rewardsQuery';
 import { useSelector } from 'react-redux';
@@ -18,7 +17,7 @@ export const RewardsSheet: React.FC = () => {
     (state: AppState) => state.settings.accountAddress
   );
   const [isLoading, setIsLoading] = useState(true);
-  const { data, isLoading: queryIsLoading } = useRewards({
+  const { data, isLoading: queryIsLoading, isLoadingError } = useRewards({
     address: accountAddress,
   });
 
@@ -32,17 +31,17 @@ export const RewardsSheet: React.FC = () => {
         // @ts-expect-error JS component
         <SlackSheet
           backgroundColor={backgroundColor}
-          height="100%"
-          contentHeight={height - top}
           additionalTopPadding={IS_ANDROID ? StatusBar.currentHeight : false}
+          {...(IS_IOS && { height: '100%' })}
+          contentHeight={height - top}
           scrollEnabled
         >
           <Box padding="20px">
-            {isLoading || data === undefined || !data.rewards ? (
-              <RewardsFakeContent />
-            ) : (
-              <RewardsContent data={data.rewards} />
-            )}
+            <RewardsContent
+              data={data}
+              isLoadingError={isLoadingError}
+              isLoading={isLoading}
+            />
           </Box>
         </SlackSheet>
       )}
