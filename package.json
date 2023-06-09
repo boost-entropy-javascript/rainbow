@@ -1,6 +1,6 @@
 {
   "name": "Rainbow",
-  "version": "1.8.20-1",
+  "version": "1.8.21-1",
   "private": true,
   "scripts": {
     "setup": "yarn install && yarn graphql-codegen:install && yarn ds:install && yarn allow-scripts && yarn postinstall && yarn graphql-codegen",
@@ -128,6 +128,7 @@
     "@types/react-redux": "7.1.9",
     "@types/url-join": "4.0.1",
     "@unstoppabledomains/resolution": "7.1.4",
+    "@wagmi/chains": "0.2.21",
     "@walletconnect/client": "1.8.0",
     "@walletconnect/core": "2.7.3",
     "@walletconnect/legacy-utils": "2.0.0",
