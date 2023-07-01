@@ -12,7 +12,6 @@ import {
 } from '@/helpers/utilities';
 import { CoinIcon } from '@/components/coin-icon';
 import { NftOffer, SortCriterion } from '@/graphql/__generated__/arc';
-import { useTheme } from '@/theme';
 import {
   AccentColorProvider,
   Box,
@@ -23,6 +22,8 @@ import {
 import { RainbowError, logger } from '@/logger';
 import { ButtonPressAnimation } from '@/components/animations';
 import Routes from '@/navigation/routesNames';
+import { analyticsV2 } from '@/analytics';
+import { useTheme } from '@/theme';
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const NFT_IMAGE_SIZE = 78;
@@ -81,6 +82,8 @@ export const Offer = ({
 }) => {
   const { navigate } = useNavigation();
   const { colorMode } = useColorMode();
+  const { isDarkMode } = useTheme();
+
   const [timeRemaining, setTimeRemaining] = useState(
     offer.validUntil
       ? Math.max(offer.validUntil * 1000 - Date.now(), 0)
@@ -152,6 +155,14 @@ export const Offer = ({
   return (
     <ButtonPressAnimation
       onPress={() => {
+        analyticsV2.track(analyticsV2.event.nftOffersOpenedSingleOfferSheet, {
+          entryPoint: 'NFTOffersCard',
+          nft: {
+            collectionAddress: offer.nft.contractAddress,
+            network: offer.network,
+            offerPriceUSD: offer.grossAmount.usd,
+          },
+        });
         navigate(Routes.NFT_SINGLE_OFFER_SHEET, { offer });
       }}
     >
@@ -206,7 +217,11 @@ export const Offer = ({
           >
             <Box
               as={ImgixImage}
-              background="surfacePrimary"
+              background={
+                isDarkMode
+                  ? 'surfaceSecondaryElevated'
+                  : 'surfacePrimaryElevated'
+              }
               source={{ uri: offer.nft.imageUrl }}
               width={{ custom: NFT_IMAGE_SIZE }}
               height={{ custom: NFT_IMAGE_SIZE }}
