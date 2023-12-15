@@ -8,6 +8,7 @@ import {
 import * as i18n from '@/languages';
 
 const ONE_WEEK_MS = 604_800_000;
+const ONE_DAY_MS = ONE_WEEK_MS / 7;
 
 export const enum RainbowPointsFlowSteps {
   Initialize = 0,
@@ -74,8 +75,6 @@ export const triggerHapticFeedback = (hapticType: HapticFeedbackType) =>
   ReactNativeHapticFeedback.trigger(hapticType);
 
 const BASE_URL = `https://twitter.com/intent/tweet?text=`;
-const RAINBOW = `🌈`;
-const RAINBOWS_STRING_GENERATOR = (num: number) => RAINBOW.repeat(num);
 export const buildTwitterIntentMessage = (
   profile: OnboardPointsMutation | undefined,
   metamaskSwaps: PointsOnboardingCategory | undefined
@@ -86,25 +85,20 @@ export const buildTwitterIntentMessage = (
     profile.onboardPoints.user.onboarding.earnings.total;
   const referralCode = profile.onboardPoints.user.referralCode;
 
+  let text = `I just had ${ONBOARDING_TOTAL_POINTS.toLocaleString(
+    'en-US'
+  )} Rainbow Points dropped into my wallet — everybody has at least 100 points waiting for them, but you might have more!\n\nClaim your drop: https://rainbow.me/points?ref=${referralCode}`;
+
   if (metamaskSwaps && metamaskSwaps?.earnings?.total > 0) {
     const METAMASK_POINTS = metamaskSwaps.earnings.total;
-
-    const rainbows = RAINBOWS_STRING_GENERATOR(3);
-
-    let text = rainbows;
-    text += `\n\nI just had ${
+    text = `I just had ${(
       ONBOARDING_TOTAL_POINTS - METAMASK_POINTS
-    } Rainbow Points dropped into my wallet — plus an extra ${METAMASK_POINTS} Points as a bonus for migrating my MetaMask wallet into Rainbow 🦊 🔫\n\nEverybody has at least 100 points waiting for them, but you might have more! Claim your drop: https://rainbow.me/points?ref=${referralCode}\n\n`;
-    text += rainbows;
-
-    return BASE_URL + text;
+    ).toLocaleString(
+      'en-US'
+    )} Rainbow Points dropped into my wallet — plus an extra ${METAMASK_POINTS.toLocaleString(
+      'en-US'
+    )} Points as a bonus for migrating my MetaMask wallet into Rainbow 🦊 🔫\n\nEverybody has at least 100 points waiting for them, but you might have more! Claim your drop: https://rainbow.me/points?ref=${referralCode}`;
   }
-
-  const rainbows = RAINBOWS_STRING_GENERATOR(17);
-
-  let text = rainbows;
-  text += `\n\nI just had ${ONBOARDING_TOTAL_POINTS} Rainbow Points dropped into my wallet — everybody has at least 100 points waiting for them, but you might have more!\n\nClaim your drop: https://rainbow.me/points?ref=${referralCode}\n\n`;
-  text += rainbows;
 
   return BASE_URL + text;
 };
@@ -122,9 +116,8 @@ export const displayNextDistribution = (seconds: number) => {
 
   const ms = seconds * 1000;
   const date = new Date(ms);
-  let minutes = date.getMinutes();
-  minutes = minutes % 60;
-  let hours = date.getHours() + (minutes <= 30 ? 0 : 1);
+  const minutes = date.getMinutes();
+  let hours = date.getHours();
   const ampm = hours >= 12 ? 'pm' : 'am';
   hours = hours % 12;
   hours = hours ? hours : 12; // the hour '0' should be '12'
@@ -135,8 +128,12 @@ export const displayNextDistribution = (seconds: number) => {
       day: 'numeric',
     })}`;
   } else {
-    const dayOfWeek = days[date.getDay()];
+    let dayOfWeek = days[date.getDay()];
+    const today = new Date().getDay();
+    if (days[today] === dayOfWeek && ms - Date.now() < ONE_DAY_MS) {
+      dayOfWeek = i18n.t(i18n.l.points.points.today);
+    }
 
-    return `${hours}${ampm} ${dayOfWeek}`;
+    return `${hours}:${minutes}${ampm} ${dayOfWeek}`;
   }
 };
