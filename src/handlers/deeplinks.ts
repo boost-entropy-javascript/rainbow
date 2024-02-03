@@ -8,7 +8,7 @@ import {
   walletConnectSetPendingRedirect,
 } from '@/redux/walletconnect';
 import { scheduleActionOnAssetReceived } from '@/redux/data';
-import { emitAssetRequest, emitChartsRequest } from '@/redux/explorer';
+
 import { fetchReverseRecordWithRetry } from '@/utils/profileUtils';
 import { defaultConfig } from '@/config/experimental';
 import { PROFILES } from '@/config/experimentalHooks';
@@ -129,8 +129,6 @@ export default async function handleDeeplink(
             if (asset) {
               _action(asset);
             } else {
-              dispatch(emitAssetRequest(address));
-              dispatch(emitChartsRequest(address));
               scheduleActionOnAssetReceived(address, _action);
             }
           }, 50);

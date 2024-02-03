@@ -4,7 +4,7 @@ import { Box, Column, Columns, Inline, Stack, Text } from '@/design-system';
 import { isNativeAsset } from '@/handlers/assets';
 import { Network } from '@/networks/types';
 import { useAsset, useDimensions } from '@/hooks';
-import { ethereumUtils } from '@/utils';
+
 import FastCoinIcon from '../asset-list/RecyclerAssetList2/FastComponents/FastCoinIcon';
 import { ButtonPressAnimation } from '../animations';
 import { FloatingEmojis } from '../floating-emojis';
@@ -20,7 +20,6 @@ interface ExchangeTokenRowProps {
 
 export default React.memo(function ExchangeTokenRow({
   item: {
-    uniqueId,
     showBalance,
     showFavoriteButton,
     onPress,
@@ -34,25 +33,19 @@ export default React.memo(function ExchangeTokenRow({
     mainnet_address,
     name,
     testID,
-    type,
+    network,
     disabled,
-    decimals,
   },
 }: ExchangeTokenRowProps) {
   const { width: deviceWidth } = useDimensions();
   const item = useAsset({
-    uniqueId,
-    mainnet_address,
-    symbol,
-    type,
     address,
-    name,
-    decimals,
+    network,
   });
-  const network = ethereumUtils.getNetworkFromType(type) ?? Network.mainnet;
+
   const rowTestID = `${testID}-exchange-coin-row-${
     symbol ?? item?.symbol ?? ''
-  }-${type || 'token'}`;
+  }-${network || Network.mainnet}`;
 
   const isInfoButtonVisible =
     !item?.isNativeAsset ||
@@ -75,7 +68,7 @@ export default React.memo(function ExchangeTokenRow({
               <Box
                 as={FastCoinIcon}
                 address={address || item?.address}
-                network={network}
+                network={network || Network.mainnet}
                 mainnetAddress={mainnet_address ?? item?.mainnet_address}
                 symbol={symbol ?? item?.symbol}
                 theme={theme}

@@ -20,9 +20,7 @@ import {
   TransactionsReceivedMessage,
 } from './data';
 import { AppGetState, AppState } from './store';
-import { disableCharts } from '@/config/debug';
 import { getProviderForNetwork, isHardHat } from '@/handlers/web3';
-import ChartTypes, { ChartType } from '@/helpers/chartTypes';
 import currencyTypes from '@/helpers/currencyTypes';
 import { Network } from '@/helpers/networkTypes';
 import {
@@ -55,13 +53,6 @@ const messages = {
     RECEIVED_ZORA: 'received address zora-transactions',
     RECEIVED_BASE: 'received address base-transactions',
   },
-  ASSET_CHARTS: {
-    RECEIVED: 'received assets charts',
-  },
-  ASSETS: {
-    CHANGED: 'changed assets prices',
-    RECEIVED: 'received assets prices',
-  },
   CONNECT: 'connect',
   DISCONNECT: 'disconnect',
   ERROR: 'error',
@@ -77,9 +68,6 @@ interface ExplorerState {
 
   // The address subscribed to on the address socket.
   addressSubscribed: string | null;
-
-  // A socket for the assets endpoint.
-  assetsSocket: Socket | null;
 }
 
 /**
@@ -87,10 +75,7 @@ interface ExplorerState {
  */
 interface ExplorerUpdateSocketsAction {
   type: typeof EXPLORER_UPDATE_SOCKETS;
-  payload: Pick<
-    ExplorerState,
-    'addressSocket' | 'addressSubscribed' | 'assetsSocket'
-  >;
+  payload: Pick<ExplorerState, 'addressSocket' | 'addressSubscribed'>;
 }
 
 /**
@@ -215,52 +200,6 @@ export const notificationsSubscription = (address: string) => (
 };
 
 /**
- * Configures an asset price subscription.
- *
- * @param tokenAddresses The token addresses to watch.
- * @param currency The currency to use.
- * @param action The subscription action.
- * @returns The arguments for an `emit` function call.
- */
-const assetPricesSubscription = (
-  tokenAddresses: string[],
-  currency: string,
-  action: SocketSubscriptionActionType = 'subscribe'
-): SocketEmitArguments => {
-  const assetCodes = concat(
-    tokenAddresses,
-    ETH_ADDRESS,
-    MATIC_MAINNET_ADDRESS,
-    BNB_MAINNET_ADDRESS,
-    OP_ADDRESS
-  );
-  return [
-    action,
-    {
-      payload: {
-        asset_codes: assetCodes,
-        currency: toLower(currency),
-      },
-      scope: ['prices'],
-    },
-  ];
-};
-
-/**
- * Arguments to `emit` for an ETH-USD price subscription.
- */
-const ethUSDSubscription: SocketEmitArguments = [
-  'subscribe',
-  {
-    payload: {
-      asset_codes: [ETH_ADDRESS],
-      currency: currencyTypes.usd,
-    },
-    scope: ['prices'],
-  },
-];
-
-/**
  * Configures a layer-2 transaction history request for a given address.
  *
  * @param address The wallet address.
@@ -290,83 +229,16 @@ const l2AddressTransactionHistoryRequest = (
 ];
 
 /**
- * Configures a chart retrieval request for assets.
- *
- * @param assetCodes The asset addresses.
- * @param currency The currency to use.
- * @param chartType The `ChartType` to use.
- * @param action The request action.
- * @returns Arguments for an `emit` function call.
- */
-const chartsRetrieval = (
-  assetCodes: string[],
-  currency: string,
-  chartType: ChartType,
-  action: SocketGetActionType = 'get'
-): SocketEmitArguments => [
-  action,
-  {
-    payload: {
-      asset_codes: assetCodes,
-      charts_type: chartType,
-      currency: toLower(currency),
-    },
-    scope: ['charts'],
-  },
-];
-
-/**
- * Emits an asset price request. The result is handled by a listener in
- * `listenOnAssetMessages`.
- *
- * @param assetAddress The address or addresses to fetch.
- */
-export const fetchAssetPrices = (assetAddress: string | string[]) => (
-  _: Dispatch,
-  getState: AppGetState
-) => {
-  const { assetsSocket } = getState().explorer;
-  const { nativeCurrency } = getState().settings;
-
-  const assetCodes = Array.isArray(assetAddress)
-    ? assetAddress
-    : [assetAddress];
-
-  const payload: SocketEmitArguments = [
-    'get',
-    {
-      payload: {
-        asset_codes: assetCodes,
-        currency: toLower(nativeCurrency),
-      },
-      scope: ['prices'],
-    },
-  ];
-  assetsSocket?.emit(...payload);
-};
-
-/**
  * Unsubscribes from existing asset subscriptions.
  */
 const explorerUnsubscribe = () => (_: Dispatch, getState: AppGetState) => {
-  const {
-    addressSocket,
-    addressSubscribed,
-    assetsSocket,
-  } = getState().explorer;
+  const { addressSocket, addressSubscribed } = getState().explorer;
   const { nativeCurrency } = getState().settings;
-  const pairs = rainbowTokenList.CURATED_TOKENS;
   if (!isNil(addressSocket)) {
     addressSocket.emit(
       ...addressSubscription(addressSubscribed!, nativeCurrency, 'unsubscribe')
     );
     addressSocket.close();
-  }
-  if (!isNil(assetsSocket)) {
-    assetsSocket.emit(
-      ...assetPricesSubscription(keys(pairs), nativeCurrency, 'unsubscribe')
-    );
-    assetsSocket.close();
   }
 };
 
@@ -388,11 +260,10 @@ export const explorerInit = () => async (
   getState: AppGetState
 ) => {
   const { network, accountAddress, nativeCurrency } = getState().settings;
-  const pairs = rainbowTokenList.CURATED_TOKENS;
-  const { addressSocket, assetsSocket } = getState().explorer;
+  const { addressSocket } = getState().explorer;
 
   // if there is another socket unsubscribe first
-  if (addressSocket || assetsSocket) {
+  if (addressSocket) {
     dispatch(explorerUnsubscribe());
   }
 
@@ -403,12 +274,10 @@ export const explorerInit = () => async (
   }
 
   const newAddressSocket = createSocket('address');
-  const newAssetsSocket = createSocket('assets');
   dispatch({
     payload: {
       addressSocket: newAddressSocket,
       addressSubscribed: accountAddress,
-      assetsSocket: newAssetsSocket,
     },
     type: EXPLORER_UPDATE_SOCKETS,
   });
@@ -419,23 +288,6 @@ export const explorerInit = () => async (
     newAddressSocket.emit(
       ...addressSubscription(accountAddress, nativeCurrency)
     );
-  });
-
-  dispatch(listenOnAssetMessages(newAssetsSocket));
-
-  newAssetsSocket.on(messages.CONNECT, () => {
-    dispatch(emitAssetRequest(keys(pairs)));
-
-    // we want to get ETH info ASAP
-    dispatch(emitAssetRequest(ETH_ADDRESS));
-
-    if (!disableCharts) {
-      // We need this for Uniswap Pools profit calculation
-      dispatch(emitChartsRequest([ETH_ADDRESS], ChartTypes.month));
-      dispatch(
-        emitChartsRequest([ETH_ADDRESS], ChartTypes.day, currencyTypes.usd)
-      );
-    }
   });
 };
 
@@ -457,74 +309,6 @@ export const emitPortfolioRequest = (address: string, currency?: string) => (
 };
 
 /**
- * Subscribes to asset price information. The result is handled by a listener
- * in `listenOnAssetMessages`.
- *
- * @param assetAddress The asset address or addresses to request.
- */
-export const emitAssetRequest = (assetAddress: string | string[]) => (
-  _: Dispatch,
-  getState: AppGetState
-) => {
-  const { nativeCurrency } = getState().settings;
-  const { assetsSocket } = getState().explorer;
-
-  const assetCodes = Array.isArray(assetAddress)
-    ? assetAddress
-    : [assetAddress];
-
-  const newAssetsCodes = assetCodes.filter(
-    code => !TokensListenedCache?.[nativeCurrency]?.[code]
-  );
-
-  newAssetsCodes.forEach(code => {
-    if (!TokensListenedCache?.[nativeCurrency]) {
-      TokensListenedCache[nativeCurrency] = {};
-    }
-    assetsSocket && (TokensListenedCache[nativeCurrency][code] = true);
-  });
-
-  if (assetsSocket) {
-    if (newAssetsCodes.length > 0) {
-      assetsSocket.emit(
-        ...assetPricesSubscription(newAssetsCodes, nativeCurrency)
-      );
-      assetsSocket.emit(...ethUSDSubscription);
-      return true;
-    }
-  } else {
-    setTimeout(() => emitAssetRequest(assetAddress), 100);
-  }
-  return false;
-};
-
-/**
- * Emits a chart information request for an asset or assets. The result
- * is handled by a listener in `listenOnAssetMessages`.
- *
- * @param assetAddress The asset address or addresses.
- * @param chartType The `ChartType` to request.
- * @param givenNativeCurrency The currency to use.
- */
-export const emitChartsRequest = (
-  assetAddress: string | string[],
-  chartType: ChartType = DEFAULT_CHART_TYPE,
-  givenNativeCurrency?: string | undefined
-) => (_: Dispatch, getState: AppGetState) => {
-  const nativeCurrency =
-    givenNativeCurrency || getState().settings.nativeCurrency;
-  const { assetsSocket } = getState().explorer;
-  const assetCodes = Array.isArray(assetAddress)
-    ? assetAddress
-    : [assetAddress];
-  if (!isEmpty(assetCodes)) {
-    assetsSocket?.emit(
-      ...chartsRetrieval(assetCodes, nativeCurrency, chartType)
-    );
-  }
-};
-
-/**
  * Emits a layer-2 transaction history request for the current address. The
  * result is handled by a listener in `listenOnAddressMessages`.
  */
@@ -536,31 +320,6 @@ export const emitL2TransactionHistoryRequest = () => (
   const { addressSocket } = getState().explorer;
   addressSocket!.emit(
     ...l2AddressTransactionHistoryRequest(accountAddress, nativeCurrency)
-  );
-};
-
-/**
- * Adds asset message listeners to a given socket.
- *
- * @param socket The socket to add listeners to.
- */
-const listenOnAssetMessages = (socket: Socket) => (
-  dispatch: ThunkDispatch<AppState, unknown, never>
-) => {
-  socket.on(messages.ASSETS.RECEIVED, (message: AssetPricesReceivedMessage) => {
-    dispatch(assetPricesReceived(message));
-  });
-
-  socket.on(messages.ASSETS.CHANGED, (message: AssetPricesChangedMessage) => {
-    dispatch(assetPricesChanged(message));
-  });
-
-  socket.on(
-    messages.ASSET_CHARTS.RECEIVED,
-    (message: ChartsReceivedMessage) => {
-      // logger.log('charts received', message?.payload?.charts);
-      dispatch(assetChartsReceived(message));
-    }
   );
 };
 
@@ -650,7 +409,6 @@ const listenOnAddressMessages = (socket: Socket) => (
 const INITIAL_STATE: ExplorerState = {
   addressSocket: null,
   addressSubscribed: null,
-  assetsSocket: null,
 };
 
 export default (
@@ -663,7 +421,6 @@ export default (
         ...state,
         addressSocket: action.payload.addressSocket,
         addressSubscribed: action.payload.addressSubscribed,
-        assetsSocket: action.payload.assetsSocket,
       };
     case EXPLORER_CLEAR_STATE:
       return {

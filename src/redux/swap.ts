@@ -1,6 +1,5 @@
 import { CrosschainQuote, Quote, QuoteError } from '@rainbow-me/swaps';
 import { AnyAction } from 'redux';
-import { fetchAssetPrices } from './explorer';
 import { SwappableAsset } from '@/entities';
 import { ExchangeModalTypes } from '@/helpers';
 import { AppDispatch, AppGetState } from '@/redux/store';
@@ -132,16 +131,13 @@ export const updateSwapInputCurrency = (
     dispatch({ payload: newInputCurrency, type: SWAP_UPDATE_INPUT_CURRENCY });
     if (
       type === ExchangeModalTypes.swap &&
-      newInputCurrency?.type !== outputCurrency?.type &&
+      newInputCurrency?.network !== outputCurrency?.network &&
       newInputCurrency &&
       !ignoreTypeCheck
     ) {
       dispatch(updateSwapOutputCurrency(null, true));
     }
 
-    if (newInputCurrency) {
-      dispatch(fetchAssetPrices(newInputCurrency.address));
-    }
     if (independentField === SwapModalField.input) {
       dispatch(updateSwapInputAmount(null));
     }
@@ -161,7 +157,7 @@ export const updateSwapOutputCurrency = (
   } else {
     if (
       type === ExchangeModalTypes.swap &&
-      newOutputCurrency?.type !== inputCurrency?.type &&
+      newOutputCurrency?.network !== inputCurrency?.network &&
       newOutputCurrency &&
       !ignoreTypeCheck
     ) {
@@ -169,9 +165,6 @@ export const updateSwapOutputCurrency = (
     }
 
     dispatch({ payload: newOutputCurrency, type: SWAP_UPDATE_OUTPUT_CURRENCY });
-    if (newOutputCurrency) {
-      dispatch(fetchAssetPrices(newOutputCurrency.address));
-    }
     if (
       independentField === SwapModalField.output ||
       newOutputCurrency === null

@@ -1,5 +1,4 @@
 import lang from 'i18n-js';
-import { ChainId } from '@rainbow-me/swaps';
 import { RouteProp, useIsFocused, useRoute } from '@react-navigation/native';
 import { uniqBy } from 'lodash';
 import { matchSorter } from 'match-sorter';
@@ -38,7 +37,7 @@ import { analytics } from '@/analytics';
 import { addHexPrefix, isL2Network } from '@/handlers/web3';
 import { CurrencySelectionTypes, Network, TokenSectionTypes } from '@/helpers';
 import {
-  useCoinListEditOptions,
+  useAccountSettings,
   useInteraction,
   useMagicAutofocus,
   usePrevious,
@@ -48,7 +47,6 @@ import {
 } from '@/hooks';
 import { delayNext } from '@/hooks/useMagicAutofocus';
 import { getActiveRoute, useNavigation } from '@/navigation/Navigation';
-import { emitAssetRequest, emitChartsRequest } from '@/redux/explorer';
 import Routes from '@/navigation/routesNames';
 import { ethereumUtils, filterList } from '@/utils';
 import NetworkSwitcherv2 from '@/components/exchange/NetworkSwitcherv2';
@@ -59,6 +57,9 @@ import { useTheme } from '@/theme';
 import { IS_TEST } from '@/env';
 import { useSortedUserAssets } from '@/resources/assets/useSortedUserAssets';
 import DiscoverSearchInput from '@/components/discover/DiscoverSearchInput';
+import { prefetchExternalToken } from '@/resources/assets/externalAssetsQuery';
+import { getNetworkFromChainId } from '@/utils/ethereumUtils';
+import { getNetworkObj } from '@/networks';
 
 export interface EnrichedExchangeAsset extends SwappableAsset {
   ens: boolean;
@@ -122,6 +123,7 @@ export default function CurrencySelectModal() {
   const isFocused = useIsFocused();
   const prevIsFocused = usePrevious(isFocused);
   const { goBack, navigate, getState: dangerouslyGetState } = useNavigation();
+  const { nativeCurrency } = useAccountSettings();
   const { colors } = useTheme();
   const dispatch = useDispatch();
   const {
@@ -185,16 +187,14 @@ export default function CurrencySelectModal() {
       const hasShownWarning = getHasShownWarning();
       if (
         otherAsset &&
-        ethereumUtils.getChainIdFromType(newAsset?.type) !==
-          ethereumUtils.getChainIdFromType(otherAsset?.type) &&
+        ethereumUtils.getChainIdFromNetwork(newAsset?.network) !==
+          ethereumUtils.getChainIdFromNetwork(otherAsset?.network) &&
         !hasShownWarning
       ) {
         Keyboard.dismiss();
         InteractionManager.runAfterInteractions(() => {
           navigate(Routes.EXPLAIN_SHEET, {
-            network: newAsset?.type
-              ? ethereumUtils.getNetworkFromType(newAsset?.type)
-              : Network.mainnet,
+            network: newAsset?.network,
             onClose: () => {
               setHasShownWarning();
               selectAsset();
@@ -255,7 +255,7 @@ export default function CurrencySelectModal() {
             decimals: 18,
             name: 'Unswappable',
             symbol: 'UNSWAP',
-            type: 'token',
+            network: Network.mainnet,
             id: 'foobar',
             uniqueId: '0x123',
           });
@@ -356,14 +356,16 @@ export default function CurrencySelectModal() {
               screen: Routes.MAIN_EXCHANGE_SCREEN,
             });
             setSearchQuery('');
-            setCurrentChainId(ethereumUtils.getChainIdFromType(item.type));
+            setCurrentChainId(
+              ethereumUtils.getChainIdFromNetwork(item.network)
+            );
           },
           android ? 500 : 0
         );
       } else {
         navigate(Routes.MAIN_EXCHANGE_SCREEN);
         setSearchQuery('');
-        setCurrentChainId(ethereumUtils.getChainIdFromType(item.type));
+        setCurrentChainId(ethereumUtils.getChainIdFromNetwork(item.network));
       }
       if (searchQueryForSearch) {
         analytics.track('Selected a search result in Swap', {
@@ -392,7 +394,7 @@ export default function CurrencySelectModal() {
       if (
         type === CurrencySelectionTypes.output &&
         currentChainId &&
-        currentChainId !== ChainId.mainnet
+        currentChainId !== getNetworkObj(Network.mainnet).id
       ) {
         const currentL2Name = ethereumUtils.getNetworkNameFromChainId(
           currentChainId
@@ -424,19 +426,20 @@ export default function CurrencySelectModal() {
     (item: any) => {
       if (!crosschainSwapsEnabled && checkForRequiredAssets(item)) return;
 
-      const isMainnet = currentChainId === 1;
-      const assetWithType =
-        isMainnet && type === CurrencySelectionTypes.output
-          ? { ...item, type: 'token' }
-          : {
-              ...item,
-              decimals:
-                item?.networks?.[currentChainId]?.decimals || item.decimals,
-            };
+      const assetWithType = {
+        ...item,
+        decimals: item?.networks?.[currentChainId]?.decimals || item.decimals,
+      };
 
       const selectAsset = () => {
-        dispatch(emitChartsRequest(item.mainnet_address || item.address));
-        dispatch(emitAssetRequest(item.mainnet_address || item.address));
+        if (!item?.balance) {
+          const network = getNetworkFromChainId(currentChainId);
+          prefetchExternalToken({
+            address: item.address,
+            network,
+            currency: nativeCurrency,
+          });
+        }
         setIsTransitioning(true); // continue to display list during transition
         callback?.();
         onSelectCurrency(assetWithType, handleNavigate);
@@ -461,6 +464,7 @@ export default function CurrencySelectModal() {
       currentChainId,
       type,
       checkForSameNetwork,
+      nativeCurrency,
       dispatch,
       callback,
       onSelectCurrency,
@@ -469,7 +473,7 @@ export default function CurrencySelectModal() {
   );
 
   const itemProps = useMemo(() => {
-    const isMainnet = currentChainId === ChainId.mainnet;
+    const isMainnet = currentChainId === getNetworkObj(Network.mainnet).id;
     return {
       onPress: handleSelectAsset,
       showBalance: type === CurrencySelectionTypes.input,
@@ -507,13 +511,13 @@ export default function CurrencySelectModal() {
   const handleBackButton = useCallback(() => {
     setSearchQuery('');
     InteractionManager.runAfterInteractions(() => {
-      const inputChainId = ethereumUtils.getChainIdFromType(
-        inputCurrency?.type
+      const inputChainId = ethereumUtils.getChainIdFromNetwork(
+        inputCurrency?.network
       );
       setCurrentChainId(inputChainId);
     });
     setIsTransitioning(true); // continue to display list while transitiong back
-  }, [inputCurrency?.type]);
+  }, [inputCurrency?.network]);
 
   useEffect(() => {
     // check if list has items before attempting to scroll
