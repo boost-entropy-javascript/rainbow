@@ -42,6 +42,7 @@ interface BrowserContextType {
   animatedActiveTabIndex: SharedValue<number> | undefined;
   closeTabWorklet: (tabId: string, tabIndex: number) => void;
   currentlyOpenTabIds: SharedValue<string[]> | undefined;
+  getActiveTabState: () => TabState | undefined;
   goBack: () => void;
   goForward: () => void;
   loadProgress: SharedValue<number> | undefined;
@@ -97,6 +98,9 @@ const DEFAULT_BROWSER_CONTEXT: BrowserContextType = {
     return;
   },
   currentlyOpenTabIds: undefined,
+  getActiveTabState: () => {
+    return undefined;
+  },
   goBack: () => {
     return;
   },
@@ -159,6 +163,12 @@ export const BrowserContextProvider = ({ children }: { children: React.ReactNode
     },
     [activeTabIndex, setTabStates, tabStates]
   );
+
+  const getActiveTabState = useCallback(() => {
+    if (!tabStates) return;
+
+    return tabStates[activeTabIndex];
+  }, [activeTabIndex, tabStates]);
 
   const searchInputRef = useRef<TextInput>(null);
   const scrollViewRef = useAnimatedRef<Animated.ScrollView>();
@@ -243,7 +253,6 @@ export const BrowserContextProvider = ({ children }: { children: React.ReactNode
       } else if (indexToMakeActive !== undefined) {
         setActiveTabIndex(indexToMakeActive);
       }
-
       shouldBlockOperationQueue.value = false;
     },
     [setTabStates, shouldBlockOperationQueue, toggleTabViewWorklet]
@@ -454,11 +463,12 @@ export const BrowserContextProvider = ({ children }: { children: React.ReactNode
         activeTabRef,
         animatedActiveTabIndex,
         closeTabWorklet,
-        currentlyOpenTabIds,
+        getActiveTabState,
         goBack,
         goForward,
         loadProgress,
         newTabWorklet,
+        currentlyOpenTabIds,
         onRefresh,
         searchViewProgress,
         searchInputRef,
