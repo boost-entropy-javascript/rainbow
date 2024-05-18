@@ -124,6 +124,7 @@ export const SwapProvider = ({ children }: SwapProviderProps) => {
     quote,
     sliderXPosition,
     isFetching,
+    isQuoteStale,
   });
 
   const AnimatedSwapStyles = useAnimatedSwapStyles({
@@ -194,6 +195,7 @@ export const SwapProvider = ({ children }: SwapProviderProps) => {
       switch (type) {
         case SwapAssetType.inputAsset:
           internalSelectedInputAsset.value = asset;
+          selectedOutputChainId.value = asset?.chainId ?? ChainId.mainnet;
           break;
         case SwapAssetType.outputAsset:
           internalSelectedOutputAsset.value = asset;
@@ -313,6 +315,8 @@ export const SwapProvider = ({ children }: SwapProviderProps) => {
         outputAsset: null,
         quote: null,
       });
+
+      SwapInputController.quoteFetchingInterval.stop();
     };
   }, []);
 
