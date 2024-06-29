@@ -253,38 +253,53 @@ export function valueBasedDecimalFormatter({
 }: {
   amount: number | string;
   nativePrice: number;
-  roundingMode?: 'up' | 'down';
+  roundingMode?: 'up' | 'down' | 'none';
   precisionAdjustment?: number;
   isStablecoin?: boolean;
   stripSeparators?: boolean;
 }): string {
   'worklet';
 
-  function calculateDecimalPlaces(): number {
-    const fallbackDecimalPlaces = MAXIMUM_SIGNIFICANT_DECIMALS;
+  function calculateDecimalPlaces(): {
+    minimumDecimalPlaces: number;
+    maximumDecimalPlaces: number;
+  } {
     if (nativePrice === 0) {
-      return fallbackDecimalPlaces;
+      return {
+        minimumDecimalPlaces: 0,
+        maximumDecimalPlaces: MAXIMUM_SIGNIFICANT_DECIMALS,
+      };
     }
+
     const unitsForOneCent = 0.01 / nativePrice;
     if (unitsForOneCent >= 1) {
-      return isStablecoin ? STABLECOIN_MINIMUM_SIGNIFICANT_DECIMALS : 0;
+      return {
+        minimumDecimalPlaces: 0,
+        maximumDecimalPlaces: 0,
+      };
     }
-    return Math.max(
-      Math.ceil(Math.log10(1 / unitsForOneCent)) + (precisionAdjustment ?? 0),
-      isStablecoin ? STABLECOIN_MINIMUM_SIGNIFICANT_DECIMALS : 0
-    );
+
+    return {
+      minimumDecimalPlaces: isStablecoin ? STABLECOIN_MINIMUM_SIGNIFICANT_DECIMALS : 0,
+      maximumDecimalPlaces: Math.max(
+        Math.ceil(Math.log10(1 / unitsForOneCent)) + (precisionAdjustment ?? 0),
+        isStablecoin ? STABLECOIN_MINIMUM_SIGNIFICANT_DECIMALS : 0
+      ),
+    };
   }
 
-  const decimalPlaces = calculateDecimalPlaces();
+  const { minimumDecimalPlaces, maximumDecimalPlaces } = calculateDecimalPlaces();
 
   let roundedAmount;
-  const factor = Math.pow(10, decimalPlaces) || 1; // Prevent division by 0
+  const factor = Math.pow(10, maximumDecimalPlaces) || 1; // Prevent division by 0
 
   // Apply rounding based on the specified rounding mode
   if (roundingMode === 'up') {
     roundedAmount = divWorklet(ceilWorklet(mulWorklet(amount, factor)), factor);
   } else if (roundingMode === 'down') {
     roundedAmount = divWorklet(floorWorklet(mulWorklet(amount, factor)), factor);
+  } else if (roundingMode === 'none') {
+    roundedAmount = toFixedWorklet(amount, maximumDecimalPlaces);
   } else {
     // Default to normal rounding if no rounding mode is specified
     roundedAmount = divWorklet(roundWorklet(mulWorklet(amount, factor)), factor);
@@ -292,8 +307,8 @@ export function valueBasedDecimalFormatter({
 
   // Format the number to add separators and trim trailing zeros
   const numberFormatter = new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: decimalPlaces,
+    minimumFractionDigits: minimumDecimalPlaces,
+    maximumFractionDigits: maximumDecimalPlaces,
     useGrouping: !stripSeparators,
   });
 
@@ -654,13 +669,14 @@ export const parseAssetAndExtend = ({
   });
 
   const uniqueId = getStandardizedUniqueIdWorklet({ address: asset.address, chainId: asset.chainId });
+  const balance = insertUserAssetBalance ? userAssetsStore.getState().getUserAsset(uniqueId)?.balance || asset.balance : asset.balance;
 
   return {
     ...asset,
     ...colors,
-    maxSwappableAmount: asset.balance.amount,
+    maxSwappableAmount: balance.amount,
     nativePrice: asset.price?.value,
-    balance: insertUserAssetBalance ? userAssetsStore.getState().getUserAsset(uniqueId)?.balance || asset.balance : asset.balance,
+    balance,
 
     // For some reason certain assets have a unique ID in the format of `${address}_mainnet` rather than
     // `${address}_${chainId}`, so at least for now we ensure consistency by reconstructing the unique ID here.

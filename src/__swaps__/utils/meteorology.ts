@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChainId } from '@/__swaps__/types/chains';
 import { rainbowMeteorologyGetData } from '@/handlers/gasFees';
 import { abs, lessThan, subtract } from '@/helpers/utilities';
+import { gweiToWei } from '@/parsers';
 import { QueryConfig, QueryFunctionArgs, QueryFunctionResult, createQueryKey, queryClient } from '@/react-query';
 import { useSwapsStore } from '@/state/swaps/swapsStore';
 import { getNetworkFromChainId } from '@/utils/ethereumUtils';
@@ -116,15 +117,15 @@ function selectGasSuggestions({ data }: MeteorologyResult, flashbots: boolean) {
     return {
       urgent: {
         isEIP1559: false,
-        gasPrice: fastGasPrice,
+        gasPrice: gweiToWei(fastGasPrice),
       },
       fast: {
         isEIP1559: false,
-        gasPrice: proposeGasPrice,
+        gasPrice: gweiToWei(proposeGasPrice),
       },
       normal: {
         isEIP1559: false,
-        gasPrice: safeGasPrice,
+        gasPrice: gweiToWei(safeGasPrice),
       },
     } as const;
   }
@@ -269,9 +270,11 @@ export const useIsChainEIP1559 = (chainId: ChainId) => {
   return data;
 };
 
-export const getCachedGasSuggestions = (chainId: ChainId) => {
+export const getCachedGasSuggestions = (
+  chainId: ChainId,
+  flashbots = chainId === ChainId.mainnet && useSwapsStore.getState().flashbots
+) => {
   const data = getMeteorologyCachedData(chainId);
-  const flashbots = chainId === ChainId.mainnet && useSwapsStore.getState().flashbots;
   if (!data) return undefined;
   return selectGasSuggestions(data, flashbots);
 };
