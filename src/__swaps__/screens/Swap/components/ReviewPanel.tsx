@@ -50,7 +50,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { REVIEW_SHEET_ROW_HEIGHT, THICK_BORDER_WIDTH } from '../constants';
-import { useSelectedGas, useSelectedGasSpeed } from '../hooks/useSelectedGas';
+import { useSelectedGasSpeed } from '../hooks/useSelectedGas';
 import { NavigationSteps, useSwapContext } from '../providers/swap-provider';
 import { AnimatedSwitch } from './AnimatedSwitch';
 import { EstimatedSwapGasFee, EstimatedSwapGasFeeSlot } from './EstimatedSwapGasFee';
@@ -126,10 +126,7 @@ const RainbowFee = () => {
 };
 
 function EstimatedGasFee() {
-  const chainId = useSwapsStore(s => s.inputAsset?.chainId || ChainId.mainnet);
-  const gasSettings = useSelectedGas(chainId);
-
-  return <EstimatedSwapGasFee gasSettings={gasSettings} align="left" color="label" size="15pt" weight="heavy" />;
+  return <EstimatedSwapGasFee align="left" color="label" size="15pt" weight="heavy" />;
 }
 
 function EstimatedArrivalTime() {
@@ -188,11 +185,11 @@ export function ReviewPanel() {
     const validQuote = quote.value as Quote;
 
     if (isInputBasedTrade && internalSelectedOutputAsset.value) {
-      const minReceived = validQuote.buyAmountDisplayMinimum;
+      const minReceived = validQuote.buyAmountDisplayMinimum || validQuote.buyAmountMinusFees;
       const { display: minReceivedDisplay } = convertRawAmountToBalanceWorklet(minReceived.toString(), internalSelectedOutputAsset.value);
       return minReceivedDisplay;
     } else if (!isInputBasedTrade && internalSelectedInputAsset.value) {
-      const maxSold = validQuote.sellAmountDisplay;
+      const maxSold = validQuote.sellAmountDisplay || validQuote.sellAmountMinusFees;
       const { display: maxSoldDisplay } = convertRawAmountToBalanceWorklet(maxSold.toString(), internalSelectedInputAsset.value);
       return maxSoldDisplay;
     }
