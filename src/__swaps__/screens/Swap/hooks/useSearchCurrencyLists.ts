@@ -207,10 +207,10 @@ export function useSearchCurrencyLists() {
     [query, state.toChainId]
   );
 
-  const { data: verifiedAssets } = useTokenSearch(
+  const { data: verifiedAssets, isLoading: isLoadingVerifiedAssets } = useTokenSearch(
     {
       list: 'verifiedAssets',
-      chainId: state.toChainId,
+      chainId: isAddress(query) ? state.toChainId : undefined,
       keys: isAddress(query) ? ['address'] : ['name', 'symbol'],
       threshold: isAddress(query) ? 'CASE_SENSITIVE_EQUAL' : 'CONTAINS',
       query: query.length > 0 ? query : undefined,
@@ -289,7 +289,7 @@ export function useSearchCurrencyLists() {
     }
   }, [memoizedData.keys, memoizedData.queryIsAddress, query, unfilteredFavorites]);
 
-  const { data: unverifiedAssets } = useTokenSearch(
+  const { data: unverifiedAssets, isLoading: isLoadingUnverifiedAssets } = useTokenSearch(
     {
       chainId: state.toChainId,
       keys: isAddress(query) ? ['address'] : ['name', 'symbol'],
@@ -324,13 +324,16 @@ export function useSearchCurrencyLists() {
         favoritesList,
         filteredBridgeAssetAddress: memoizedData.filteredBridgeAsset?.address,
       }),
+      isLoading: isLoadingVerifiedAssets || isLoadingUnverifiedAssets,
     };
   }, [
     favoritesList,
+    isLoadingUnverifiedAssets,
+    isLoadingVerifiedAssets,
     memoizedData.enableUnverifiedSearch,
     memoizedData.filteredBridgeAsset,
     query,
-    selectedOutputChainId,
+    selectedOutputChainId.value,
     state.assetToSellAddress,
     unverifiedAssets,
     verifiedAssets,
