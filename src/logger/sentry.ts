@@ -8,7 +8,6 @@ import isTestFlight from '@/helpers/isTestFlight';
 
 export const defaultOptions: Sentry.ReactNativeOptions = {
   attachStacktrace: true,
-  defaultIntegrations: false,
   dsn: SENTRY_ENDPOINT,
   enableAppHangTracking: false,
   enableAutoPerformanceTracing: false,
@@ -16,7 +15,7 @@ export const defaultOptions: Sentry.ReactNativeOptions = {
   enableTracing: false,
   environment: isTestFlight ? 'Testflight' : SENTRY_ENVIRONMENT,
   integrations: [],
-  maxBreadcrumbs: 5,
+  maxBreadcrumbs: 10,
   tracesSampleRate: 0,
 };
 
