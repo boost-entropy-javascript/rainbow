@@ -1,14 +1,16 @@
+import { ParsedSearchAsset, UniqueId, UserAssetFilter } from '@/__swaps__/types/assets';
 import { Address } from 'viem';
 import { RainbowError, logger } from '@/logger';
 import store from '@/redux/store';
 import { ETH_ADDRESS, SUPPORTED_CHAIN_IDS, supportedNativeCurrencies } from '@/references';
 import { createRainbowStore } from '@/state/internal/createRainbowStore';
-import { ParsedSearchAsset, UniqueId, UserAssetFilter } from '@/__swaps__/types/assets';
-import { ChainId } from '@/__swaps__/types/chains';
-import { swapsStore } from '../swaps/swapsStore';
+import { swapsStore } from '@/state/swaps/swapsStore';
+import { ChainId } from '@/networks/types';
+import { useConnectedToHardhatStore } from '../connectedToHardhat';
 
 const SEARCH_CACHE_MAX_ENTRIES = 50;
 
+const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const getSearchQueryKey = ({ filter, searchQuery }: { filter: UserAssetFilter; searchQuery: string }) => `${filter}${searchQuery}`;
 
 const getDefaultCacheKeys = (): Set<string> => {
@@ -159,7 +161,7 @@ export const userAssetsStore = createRainbowStore<UserAssetsState>(
         return cachedData;
       } else {
         const chainIdFilter = filter === 'all' ? null : filter;
-        const searchRegex = inputSearchQuery.length > 0 ? new RegExp(inputSearchQuery, 'i') : null;
+        const searchRegex = inputSearchQuery.length > 0 ? new RegExp(escapeRegExp(inputSearchQuery), 'i') : null;
 
         const filteredIds = Array.from(
           selectUserAssetIds(
@@ -179,7 +181,6 @@ export const userAssetsStore = createRainbowStore<UserAssetsState>(
         return filteredIds;
       }
     },
-
     getHighestValueEth: () => {
       const preferredNetwork = swapsStore.getState().preferredNetwork;
       const assets = get().userAssets;
@@ -278,7 +279,7 @@ export const userAssetsStore = createRainbowStore<UserAssetsState>(
         });
 
         // Ensure all supported chains are in the map with a fallback value of 0
-        SUPPORTED_CHAIN_IDS({ testnetMode: false }).forEach(chainId => {
+        SUPPORTED_CHAIN_IDS({ testnetMode: useConnectedToHardhatStore.getState().connectedToHardhat }).forEach(chainId => {
           if (!unsortedChainBalances.has(chainId)) {
             unsortedChainBalances.set(chainId, 0);
             idsByChain.set(chainId, []);
